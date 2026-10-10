@@ -228,6 +228,9 @@ svg{display:block}
 .au-dialog .lf-field{margin-bottom:14px}
 .au-dialog .lf-role{margin-bottom:0}
 .dg-ok{background:var(--blue);color:#fff}.dg-ok:hover{background:var(--blue-d)}
+.rm-run-track{height:8px;border-radius:5px;background:var(--gray-bg);overflow:hidden;margin-bottom:10px}
+.rm-run-fill{height:100%;background:var(--blue);border-radius:5px;transition:width .3s linear}
+.rm-run-pct{font-size:13px;color:var(--txt2);margin-bottom:22px}
 
 /* ============ 主体：左侧栏 + 内容 ============ */
 .body{flex:1;display:flex;min-height:0;padding:14px;gap:14px}
@@ -1668,6 +1671,7 @@ select.wkf-in{cursor:pointer;appearance:none;-webkit-appearance:none;
 .pm-grp svg{width:16px;height:16px;stroke-width:2}
 .pm-grp:not(:first-child){margin-top:18px;padding-top:15px;border-top:1px dashed var(--line2)}
 .pm-grp-tools{margin-left:auto;display:flex;gap:8px;align-items:center}
+.pm-grp-ttl{display:inline-flex;align-items:center;gap:7px}
 .pm-grp-btn{height:32px;padding:0 12px;border-radius:8px;background:var(--gray-bg);border:1.5px solid var(--line2);
   color:var(--txt2);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;transition:.13s}
 .pm-grp-btn svg{width:14px;height:14px;stroke-width:2.2}
@@ -1982,6 +1986,7 @@ const S={ active:'exec', unit:'A', mode:'手动', navCollapsed:false,
   taskWk:'WK-001', taskTpl:'WPS-X70-18.4',
   running:false, paused:false, stepDone:0, errored:false, stopDlg:false,
   gateDlg:false, gateDoneName:'', gateNextName:'',
+  alarmDlg:false, alarmStepName:'', capAlarmShown:false,
   jumpDlg:false,
   statusText:'系统就绪，请选择任务后启动', statusType:'idle', /* idle/run/warn/err/done */
   /* 日志栏（新增在前，只保留最近若干条） */
@@ -2000,7 +2005,7 @@ const S={ active:'exec', unit:'A', mode:'手动', navCollapsed:false,
   /* 焊接机器人遥控模块：pose=transport缩回原点(运输状态)/work展开原点(工作状态) */
   rob:{ pose:'work', torchUp:false, gasTest:false, wireTest:false },
   /* 设备遥控：当前遥控的设备（chassis 移动底盘 / robot 焊接机器人） */
-  rm:{ tab:'chassis', unit:'A' },
+  rm:{ tab:'chassis', unit:'A', run:null },
   /* 三维场景浮层：收缩状态 + 各浮层拖动位置(null=用CSS默认) */
   ov:{ propsCollapsed:false, taskCollapsed:false, progFold:false,
        robTab:'A',                      /* 程序栏选定的机器人 */
@@ -2033,7 +2038,6 @@ const S={ active:'exec', unit:'A', mode:'手动', navCollapsed:false,
         camSet:{exposure:12, gain:6, resolution:'1920x1200', dispRatio:100} },
   /* 离线仿真模块（与任务执行/阶段状态机完全解耦，自带工件+工艺选择，即选即算理论路径） */
   ol:{ mouseMode:'select',          /* select | orbit | pan | zoom */
-       collision:false,             /* 碰撞检测开关（无弹窗，按钮状态切换） */
        mgmtOpen:false,              /* 左上角程序组管理下拉菜单 */
        /* 本模块独立的工件+工艺选择（即选即算，非任务记录） */
        simWk:null, simTpl:null,
@@ -2893,11 +2897,12 @@ function ctrlRow(){
 function flowChart(){
   const steps=flowSteps();
   const t=curTask();
+  const errSteps=t&&t.errStep?(Array.isArray(t.errStep)?t.errStep:[t.errStep]):[];
   let ai=0; // 有效节点序号（跳过未启用的可选节点）
   const nodes=steps.map(s=>{
     let cls='', st='待执行';
     if(s.opt && !s.on){ cls='skip'; st='未启用'; }
-    else if(S.errored && t && t.errStep===s.k && ai===S.stepDone){ cls='err'; st='异常'; ai++; }
+    else if(S.errored && (errSteps.includes(s.k)||s.k==='cap') && ai===S.stepDone){ cls='err'; st='异常'; ai++; }
     else {
       if(ai<S.stepDone){ cls='done'; st='已完成'; }
       else if(ai===S.stepDone && S.running && !S.paused){ cls='run'; st='执行中'; }
@@ -2976,6 +2981,30 @@ function gateDialog(){
     </div></div></div>`;
 }
 
+/* ===== 报警处理弹窗（示例：盖面节点断弧）===== */
+function alarmDialog(){
+  return `<div class="mask" id="alarmMask"><div class="dialog">
+    <div class="dg-ic" style="background:#fdeded;color:var(--err)">${ic('bell')}</div>
+    <h3>报警：${S.alarmStepName} 断弧</h3>
+    <p>级别：严重　来源：焊接电源<br>描述：检测到电弧中断，已自动暂停，请人工排查断弧原因（送丝、气体保护、导电嘴等）后处理。</p>
+    <p>确认继续执行将从断弧点续焊；终止将停止作业，当前节点初始化到执行前状态。</p>
+    <div class="dg-btns">
+      <button class="dg-cancel" id="alarmStop">终止</button>
+      <button class="dg-ok" id="alarmContinue">继续执行</button>
+    </div></div></div>`;
+}
+/* ===== 设备遥控动作执行弹窗（撑脚落地/回收、一键调平、机器人回原点）===== */
+function rmRunDialog(){
+  const r=S.rm.run; if(!r) return '';
+  const done=r.phase==='done';
+  return `<div class="mask" id="rmRunMask"><div class="dialog">
+    <div class="dg-ic" style="${done?'background:#e3f7ec;color:#27ae60':''}">${ic(done?'check':'chassis')}</div>
+    <h3>${done?r.label.replace(/中$/,'')+'完成':r.label}</h3>
+    ${done?`<div class="dg-btns"><button class="dg-ok" id="rmRunOk">${ic('check')}确认</button></div>`
+      :`<div class="rm-run-track"><div class="rm-run-fill" style="width:${r.pct}%"></div></div>
+    <div class="rm-run-pct">${r.pct}%</div>`}
+  </div></div>`;
+}
 /* ===== 单元就位确认弹窗 ===== */
 function unitDialog(){
   const k=S.unitDlg; if(!k) return '';
@@ -3524,7 +3553,7 @@ function render(){
   }
   syncValidation();          /* 阶段推进/回退时自动触发或清除规划验证 */
   document.getElementById('device').innerHTML = topbar()+`<div class="body">${sidebar()}${contentArea()}</div>`+gsbBar()
-    + (S.dlg?modeDialog():'') + (S.stopDlg?stopDialog():'') + (S.gateDlg?gateDialog():'') + (S.jumpDlg?jumpDialog():'') + (S.unitDlg?unitDialog():'') + (S.logDlg?logDialog():'')
+    + (S.dlg?modeDialog():'') + (S.stopDlg?stopDialog():'') + (S.gateDlg?gateDialog():'') + (S.alarmDlg?alarmDialog():'') + (S.rm.run?rmRunDialog():'') + (S.jumpDlg?jumpDialog():'') + (S.unitDlg?unitDialog():'') + (S.logDlg?logDialog():'')
     + (S.ov.twOpen?execWizard():'')
     + (S.ov.esOpen?esDialog():'')
     + (S.ov.tmp.open?tmpPopup():'')
@@ -3578,6 +3607,11 @@ function render(){
   /* 节点人工放行弹窗 */
   const gc=document.getElementById('gateContinue'); if(gc) gc.onclick=()=>gateContinue();
   const gs=document.getElementById('gateStop'); if(gs) gs.onclick=()=>gateStop();
+  /* 报警处理弹窗（断弧） */
+  const ac=document.getElementById('alarmContinue'); if(ac) ac.onclick=()=>alarmContinue();
+  const as=document.getElementById('alarmStop'); if(as) as.onclick=()=>alarmTerminate();
+  /* 设备遥控动作执行弹窗 */
+  const rro=document.getElementById('rmRunOk'); if(rro) rro.onclick=()=>rmRunConfirm();
   /* 单元就位切换 */
   document.querySelectorAll('[data-unitchip]').forEach(b=>b.onclick=()=>{S.unitDlg=b.dataset.unitchip;render();});
   const uc=document.getElementById('unitCancel'); if(uc) uc.onclick=()=>{S.unitDlg=null;render();};
@@ -3951,6 +3985,26 @@ function remoteView(){
     <div class="rm-body">${body}</div>
   </div>`;
 }
+/* ===== 设备遥控动作执行（弹窗显示进度，完成后等待人工确认）===== */
+let rmRunTimer=null;
+function rmRunStart(label,applyFn){
+  clearTimeout(rmRunTimer);
+  S.rm.run={label,pct:0,phase:'running',apply:applyFn};
+  render(); rmRunTick();
+}
+function rmRunTick(){
+  rmRunTimer=setTimeout(()=>{
+    const r=S.rm.run; if(!r||r.phase!=='running') return;
+    r.pct=Math.min(100,r.pct+20);
+    if(r.pct>=100){ r.phase='done'; render(); return; }
+    render(); rmRunTick();
+  },300);
+}
+function rmRunConfirm(){
+  const r=S.rm.run; if(!r||r.phase!=='done') return;
+  if(r.apply) r.apply();
+  S.rm.run=null; render();
+}
 function robotRemoteView(){
   const r=S.rob;
   return `<div class="chassis">
@@ -3973,7 +4027,10 @@ function robotRemoteView(){
 }
 function bindRobotRemote(){
   const r=S.rob;
-  document.querySelectorAll('[data-rpose]').forEach(b=>b.onclick=()=>{r.pose=b.dataset.rpose;render();});
+  document.querySelectorAll('[data-rpose]').forEach(b=>b.onclick=()=>{
+    const pose=b.dataset.rpose; if(pose===r.pose||S.rm.run) return;
+    rmRunStart(pose==='transport'?'缩回原点中':'展开原点中', ()=>{ r.pose=pose; });
+  });
   document.querySelectorAll('[data-radj]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.radj;
     r[a]=!r[a];
@@ -4033,9 +4090,11 @@ function bindChassis(){
   document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{c.speed=+b.dataset.speed;render();});
   document.querySelectorAll('[data-adj]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.adj;
-    if(a==='level') c.leveled=!c.leveled;
-    else if(a==='grid') c.grid=!c.grid;
-    render();
+    if(a==='grid'){ c.grid=!c.grid; render(); return; }
+    if(S.rm.run) return;
+    if(a==='down') rmRunStart('撑脚落地中', ()=>{});
+    else if(a==='up') rmRunStart('撑脚回收中', ()=>{});
+    else if(a==='level') rmRunStart(c.leveled?'调平复位中':'自动调平中', ()=>{ c.leveled=!c.leveled; });
   });
 }
 
@@ -4167,13 +4226,17 @@ function pmPositionInfoPop(){
   pop.style.top=top+'px';
   pop.style.visibility='visible';
 }
-/* 参数解释弹层的关/开涉及全量 render()，为避免重建 DOM 导致滚动条回到顶部，包裹滚动位置的捕获与还原 */
-function pmToggleInfo(key){
-  const p=S.pm;
+/* 工艺管理页涉及全量 render() 的操作（层/道增删、切换、参数说明弹层等）都会重建 DOM 导致滚动条回到顶部，
+   统一用该辅助函数包裹：渲染前记住 .pm-body 的滚动位置，渲染后还原 */
+function pmRenderKeepScroll(mutateFn){
   const pb=document.querySelector('.pm-body'); const st=pb?pb.scrollTop:0;
-  p.infoOpen=(p.infoOpen===key)?null:key;
+  if(mutateFn) mutateFn();
   render();
   const pb2=document.querySelector('.pm-body'); if(pb2) pb2.scrollTop=st;
+}
+function pmToggleInfo(key){
+  const p=S.pm;
+  pmRenderKeepScroll(()=>{ p.infoOpen=(p.infoOpen===key)?null:key; });
 }
 function pmCloseInfo(){
   const p=S.pm;
@@ -4226,7 +4289,7 @@ function pmBasicForm(){
       ${gfld('终点搭接长度','global.lapEnd',g.lapEnd,'mm')}
     </div>
     <div class="pm-grp">
-      <span>${ic('layers')}层道结构 · ${d.layers.length} 层</span>
+      <span class="pm-grp-ttl">${ic('layers')}层道结构 · ${d.layers.length} 层</span>
       <div class="pm-grp-tools">
         ${canAddLayer?`<button class="pm-grp-btn" data-pmact="layer-add" ${isAdmin()?'':'disabled'} title="${isAdmin()?'添加填充层':'仅管理员可修改工艺库'}">${ic('plus')}填充层</button>`:''}
         ${!hasCap?`<button class="pm-grp-btn" data-pmact="layer-add-cap" ${isAdmin()?'':'disabled'} title="${isAdmin()?'添加盖面层':'仅管理员可修改工艺库'}">${ic('plus')}盖面层</button>`:''}
@@ -4895,8 +4958,6 @@ function olbar(){
     <div class="olb-sep"></div>
     ${visBtn('ol','olvis')}
     <div class="olb-sep"></div>
-    ${solo('shield',o.collision?'碰撞检测 · 已开启':'碰撞检测 · 已关闭','collision',o.collision?'on':'')}
-    <div class="olb-sep"></div>
     ${solo('move3d','组件位置修改','compwin',o.fwin.comp.open?'on':'')}
     ${solo('teach','机器人位置修改','robotwin',o.fwin.robot.open?'on':'')}
   </div>`;
@@ -4907,12 +4968,10 @@ function olGroupBlock(){
   const wk=WORKPIECES.find(w=>w.id===o.simWk);
   const tp=TPLLIB.find(t=>t.id===o.simTpl);
   const idle=!wk;
-  /* 未选工件时：仅保留"新建程序组"作为选工件工艺的唯一入口；已选工件时才出现保存/导入/导出/重新规划 */
+  /* 未选工件时：仅保留"新建程序组"作为选工件工艺的唯一入口；已选工件时才出现导入/导出/重新规划 */
   const menu=o.mgmtOpen?`<div class="olg-menu">
     <div class="olb-mitem" data-mgmt="new">${ic('plus')}新建程序组</div>
-    ${idle?'':`<div class="olb-mitem" data-mgmt="save">${ic('save')}保存程序组</div>
-    <div class="olb-msep"></div>
-    <div class="olb-mitem" data-mgmt="import">${ic('import')}导入程序包</div>
+    ${idle?'':`<div class="olb-mitem" data-mgmt="import">${ic('import')}导入程序包</div>
     <div class="olb-mitem" data-mgmt="export">${ic('export')}导出程序包</div>
     <div class="olb-msep"></div>
     <div class="olb-mitem warn" data-mgmt="replan">${ic('reset')}重新规划（覆盖）</div>`}
@@ -5162,7 +5221,7 @@ function olPopup(){
 function replanPopup(){
   return `<div class="dialog"><div class="dg-ic" style="background:#fef4e3;color:#e08c0a">${ic('reset')}</div>
     <h3>重新规划将覆盖现有程序</h3>
-    <p>重新规划会用新结果覆盖当前程序组（含全部手动修改）。可沿用或更换工件/工艺模板。确认继续？</p>
+    <p>重新规划会用新结果覆盖当前程序组。可沿用或更换工件/工艺模板。确认继续？</p>
     <div class="dg-btns"><button class="dg-cancel" data-act="pop-close">取消</button>
       <button class="dg-ok" data-act="replan-go" style="background:var(--warn)">继续并选择</button></div></div>`;
 }
@@ -5781,16 +5840,19 @@ function bindMonitor(){
     const layerNo=+b.dataset.pmlayer;
     const passNo=b.dataset.pmpass ? +b.dataset.pmpass : 1;
     collectPm();
-    S.pm.selLayer=layerNo;
-    S.pm.selPass=passNo;
-    render();
+    pmRenderKeepScroll(()=>{ S.pm.selLayer=layerNo; S.pm.selPass=passNo; });
   });
   document.querySelectorAll('[data-pmlayerdel]').forEach(b=>b.onclick=()=>{
     const i=+b.dataset.pmlayerdel; const d=pmDraft(); if(!d||!d.layers[i]) return;
     if(d.layers.length===1){ pmToast('至少保留一层'); render(); return; }
-    collectPm(); d.layers.splice(i,1); d.layers.forEach((l,j)=>l.no=j+1);
-    if(S.pm.selLayer>d.layers.length) S.pm.selLayer=d.layers.length;
-    S.pm.selPass=1; render();});
+    collectPm();
+    pmRenderKeepScroll(()=>{
+      d.layers.splice(i,1); d.layers.forEach((l,j)=>l.no=j+1);
+      pmRenumberFillNames(d);
+      if(S.pm.selLayer>d.layers.length) S.pm.selLayer=d.layers.length;
+      S.pm.selPass=1;
+    });
+  });
   document.querySelectorAll('[data-pmaddpass]').forEach(b=>b.onclick=(e)=>{
     e.stopPropagation();
     const i=+b.dataset.pmaddpass; pmAddPass(i); return;});
@@ -5800,10 +5862,11 @@ function bindMonitor(){
     collectPm();
     const d=pmDraft(); if(!d) return;
     const layer=d.layers[i]; if(!layer||layer.passCount<=1) return;
-    layer.passes.pop();
-    layer.passCount--;
-    if(S.pm.selPass>layer.passCount) S.pm.selPass=layer.passCount;
-    render();
+    pmRenderKeepScroll(()=>{
+      layer.passes.pop();
+      layer.passCount--;
+      if(S.pm.selPass>layer.passCount) S.pm.selPass=layer.passCount;
+    });
   });
   /* 工具栏与弹窗动作 */
   document.querySelectorAll('[data-pmact]').forEach(b=>{
@@ -5862,13 +5925,20 @@ function pmAction(a){
     if(idx<0){ pmToast('未找到选中的层'); render(); return; }
     if(d.layers[idx].type==='base'){ pmToast('打底层不能删除'); render(); return; }
     if(d.layers.length===1){ pmToast('至少保留一层'); render(); return; }
-    d.layers.splice(idx,1);
-    d.layers.forEach((l,j)=>l.no=j+1);
-    S.pm.selLayer=Math.min(S.pm.selLayer,d.layers.length);
-    S.pm.selPass=1;
-    render();
+    pmRenderKeepScroll(()=>{
+      d.layers.splice(idx,1);
+      d.layers.forEach((l,j)=>l.no=j+1);
+      pmRenumberFillNames(d);
+      S.pm.selLayer=Math.min(S.pm.selLayer,d.layers.length);
+      S.pm.selPass=1;
+    });
     return;
   }
+}
+/* 层删除/增加后，统一按顺序重排"填充N"命名（no是位置序号，和填充计数是两回事，不能混用） */
+function pmRenumberFillNames(d){
+  let n=0;
+  d.layers.forEach(l=>{ if(l.type==='fill'){ n++; l.name='填充'+n; } });
 }
 function pmAddLayer(type){
   const d=pmDraft(); if(!d) return;
@@ -5876,7 +5946,7 @@ function pmAddLayer(type){
   const newNo=d.layers.length+1;
   const defZone=(pos)=>({pos,speed:450,wireFeed:8200,weaveWidth:1.0,weaveSpeed:1000,dwellL:40,dwellR:40,arcCorr:0,indCorr:0,curve:'',job:''});
   const newLayer={
-    no:newNo, name:layerType==='cap'?'盖面':'填充'+newNo, type:layerType, height:2.5, passOffset:0, headGap:0, passCount:1,
+    no:newNo, name:layerType==='cap'?'盖面':'填充?', type:layerType, height:2.5, passOffset:0, headGap:0, passCount:1,
     arcParams:{stickout:15,preGas:0.5,postGas:1.0,liftHeight:5,liftSpeed:50},
     passes:[{passNo:1, zones:[
       defZone('0-15'),defZone('15-30'),defZone('30-45'),defZone('45-60'),
@@ -5884,10 +5954,12 @@ function pmAddLayer(type){
       defZone('120-135'),defZone('135-150'),defZone('150-165'),defZone('165-180')
     ]}]
   };
-  d.layers.push(newLayer);
-  S.pm.selLayer=newNo;
-  S.pm.selPass=1;
-  render();
+  pmRenderKeepScroll(()=>{
+    d.layers.push(newLayer);
+    pmRenumberFillNames(d);
+    S.pm.selLayer=newNo;
+    S.pm.selPass=1;
+  });
 }
 function pmAddPass(layerIdx){
   collectPm();
@@ -5903,11 +5975,12 @@ function pmAddPass(layerIdx){
       defZone('120-135'),defZone('135-150'),defZone('150-165'),defZone('165-180')
     ]
   };
-  layer.passes.push(newPass);
-  layer.passCount=newPassNo;
-  S.pm.selLayer=layer.no;
-  S.pm.selPass=newPassNo;
-  render();
+  pmRenderKeepScroll(()=>{
+    layer.passes.push(newPass);
+    layer.passCount=newPassNo;
+    S.pm.selLayer=layer.no;
+    S.pm.selPass=newPassNo;
+  });
 }
 /* 校验单个分区表（12分区，需覆盖0~180°无缺口无重叠）+ 各分区数值有效性 */
 function validateZones(zones,label,errors){
@@ -6210,7 +6283,6 @@ function bindOffline(){
     e.stopPropagation();const a=b.dataset.olact;
     if(a==='compwin'){o.fwin.comp.open=!o.fwin.comp.open;render();return;}
     if(a==='robotwin'){o.fwin.robot.open=!o.fwin.robot.open;render();return;}
-    if(a==='collision'){o.collision=!o.collision;render();return;}   /* 纯开关，无弹窗 */
     if(a==='prog-collapse'){o.progCollapsed=!o.progCollapsed;render();return;}
     if(a==='prog-float'){o.progFloat=!o.progFloat;o.progPos=null;render();return;}
     if(a==='iso'||a==='fit'){                    /* 视图预设：驱动真实相机 */
@@ -6224,12 +6296,11 @@ function bindOffline(){
     if(a==='mgmt'){ o.mgmtOpen=!o.mgmtOpen; render(); return; }        /* 程序组管理下拉菜单 */
     o.popup={type:a};render();                    /* 其余纯弹窗类型 */
   });
-  /* 左上角信息块管理下拉：新建/保存程序组、导入/导出程序包、重新规划 */
+  /* 左上角信息块管理下拉：新建程序组、导入/导出程序包、重新规划 */
   document.querySelectorAll('[data-mgmt]').forEach(b=>b.onclick=(e)=>{
     e.stopPropagation(); const a=b.dataset.mgmt; o.mgmtOpen=false;
     if(a==='new'){ o.wiz={open:true,step:0,wk:o.simWk,tpl:o.simTpl}; render(); return; }
     if(a==='replan'){ o.popup={type:'replan'}; render(); return; }
-    if(a==='save'){ showToast('程序组已保存'); render(); return; }
     if(a==='import'){ showToast('请选择要导入的程序包文件（原型演示，未接入真实文件系统）'); render(); return; }
     if(a==='export'){ showToast('程序包已导出'); render(); return; }
     render();
@@ -6755,7 +6826,7 @@ function bindExec(){
   if(tb) tb.onclick=(e)=>{e.stopPropagation();S.taskOpen=!S.taskOpen;render();};
   document.querySelectorAll('[data-task]').forEach(o=>o.onclick=()=>{
     if(S.running) return; // 执行中不允许切任务
-    S.taskId=o.dataset.task; S.taskOpen=false; S.stepDone=0; S.errored=false;
+    S.taskId=o.dataset.task; S.taskOpen=false; S.stepDone=0; S.errored=false; S.alarmDlg=false; S.capAlarmShown=false;
     setStatus('已选择任务 '+S.taskId+'，可启动执行','idle'); render();
   });
   const start=document.getElementById('btnStart'); if(start) start.onclick=()=>startRun();
@@ -6776,8 +6847,16 @@ function advanceStep(){
   const total=totalActive();
   const a=activeSteps();
   const t=curTask();
+  const curKey=a[S.stepDone]&&a[S.stepDone].k;
+  // 盖面节点：固定演示断弧报警（与具体任务无关），每次运行首次到达该节点时触发一次
+  if(curKey==='cap' && !S.capAlarmShown){
+    S.running=false; S.paused=true; S.errored=true; clearTimeout(execTimer);
+    S.alarmDlg=true; S.alarmStepName=a[S.stepDone].nm; S.capAlarmShown=true;
+    setStatus('异常：'+a[S.stepDone].nm+'检测到断弧报警，等待处理','err'); render(); return;
+  }
   // 当前正在执行的节点若为异常节点，则报错中断（示例：W-020 粗定位）
-  if(t && t.errStep && a[S.stepDone] && a[S.stepDone].k===t.errStep){
+  const errSteps=t&&t.errStep?(Array.isArray(t.errStep)?t.errStep:[t.errStep]):[];
+  if(curKey && errSteps.includes(curKey)){
     S.running=false; S.errored=true; clearTimeout(execTimer);
     setStatus('异常：'+a[S.stepDone].nm+'失败，请排查后点击报警复位','err'); render(); return;
   }
@@ -6808,6 +6887,24 @@ function gateStop(){
   // 放行弹窗点终止：已完成的节点（gateDoneName）进度保留，下一节点尚未开始，无需重置
   S.gateDlg=false; S.running=false; S.paused=false; clearTimeout(execTimer);
   setStatus(S.gateDoneName+' 完成后已终止，已完成进度保留，下一节点未执行','warn'); render();
+}
+function alarmContinue(){
+  // 断弧报警确认继续：从断点续焊，视为该节点完成
+  const total=totalActive(); const a=activeSteps();
+  const doneName=a[S.stepDone].nm;
+  S.alarmDlg=false; S.errored=false;
+  S.stepDone++;
+  if(S.stepDone>=total){
+    S.running=false; S.paused=false;
+    setStatus('任务 '+S.taskId+' 全部工序完成（断弧报警已处理，从断点续焊完成）','done'); render(); return;
+  }
+  S.paused=true; clearTimeout(execTimer);
+  S.gateDlg=true; S.gateDoneName=doneName+'（断弧报警已处理，续焊完成）'; S.gateNextName=a[S.stepDone].nm;
+  setStatus(doneName+' 已完成，等待确认放行','warn'); render();
+}
+function alarmTerminate(){
+  S.alarmDlg=false; S.running=false; S.paused=false; S.errored=false; S.capAlarmShown=false; clearTimeout(execTimer);
+  setStatus('已终止：'+S.alarmStepName+'存在未处理的断弧报警，当前节点已初始化到执行前状态','warn'); render();
 }
 function curStepName(){ const a=activeSteps(); return a[Math.min(S.stepDone,a.length-1)].nm; }
 /* 收缩小条上的流程状态文字 */
@@ -6857,16 +6954,22 @@ function stepRun(){
   if(S.running) return;
   const total=totalActive();
   if(S.stepDone>=total){ setStatus('流程已完成，如需重跑请先复位','done'); render(); return; }
+  const a=activeSteps();
+  if(a[S.stepDone] && a[S.stepDone].k==='cap' && !S.capAlarmShown){
+    S.errored=true; S.alarmDlg=true; S.alarmStepName=a[S.stepDone].nm; S.capAlarmShown=true;
+    setStatus('异常：'+a[S.stepDone].nm+'检测到断弧报警，等待处理','err'); render(); return;
+  }
   S.stepDone++;
   if(S.stepDone>=total) setStatus('单步执行完成，全部工序完成','done');
   else setStatus('单步完成，下一步：'+curStepName(),'idle');
   render();
 }
 function resetFlow(){
-  S.running=false; S.paused=false; clearTimeout(execTimer); S.stepDone=0; S.errored=false; S.stopDlg=false; S.gateDlg=false;
+  S.running=false; S.paused=false; clearTimeout(execTimer); S.stepDone=0; S.errored=false; S.stopDlg=false; S.gateDlg=false; S.alarmDlg=false; S.capAlarmShown=false;
   setStatus('流程已复位，等待启动','idle'); render();
 }
 function alarmReset(){
+  if(S.alarmDlg) return; // 断弧报警需在弹窗中选择继续执行或终止，不支持直接复位
   if(S.statusType==='err'||S.statusType==='warn'){
     S.errored=false;
     setStatus('报警已复位，可重新启动','idle'); render();
