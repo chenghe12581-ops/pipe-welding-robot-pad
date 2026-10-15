@@ -1750,8 +1750,15 @@ select.pm-in{cursor:pointer;appearance:none;background-image:url("data:image/svg
 .pm-fld-range .pm-range-inp input{flex:1}
 .pm-fld-range .pm-range-inp span{color:var(--txt3);font-size:13px;font-weight:600}
 /* 视觉模块：左侧相机窗口 / 右侧相机参数 */
-.vis-cam-split{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:stretch;min-height:420px}
+.vis-cam-split{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:stretch;flex:1;min-height:420px}
 .vis-cam-win{display:flex;flex-direction:column;min-width:0}
+.vis-seg-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.vis-seg-tabs{display:flex;gap:4px;padding:4px;border-radius:10px;background:var(--gray-bg)}
+.vis-seg-btn{height:32px;padding:0 15px;border-radius:7px;font-size:13px;font-weight:700;color:var(--txt2);
+  background:none;border:none;cursor:pointer;font-family:inherit;transition:.13s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.vis-seg-btn svg{width:14px;height:14px;stroke-width:2}
+.vis-seg-btn:hover{color:var(--txt)}
+.vis-seg-btn.on{background:var(--white);color:var(--blue);box-shadow:var(--shadow-sm)}
 .vis-cam-params{border-left:1px dashed var(--line2);padding-left:20px}
 .vis-cam-win .view-box{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
   border:1.5px dashed var(--line2);border-radius:12px;background:var(--gray-bg);color:var(--txt3)}
@@ -1962,10 +1969,10 @@ const ic=(k,cls='')=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 /* ===== 模块定义 ===== */
 const MODULES=[
   {id:'exec',     ic:'exec',   nm:'任务执行', sub:'选择焊接任务 · 关键节点状态监测', dual:false},
+  {id:'vis',      ic:'camera', nm:'视觉模块', sub:'多相机视窗', dual:false},
   {id:'offline',  ic:'route',  nm:'离线仿真', sub:'理论路径仿真 · 可达性验证', dual:false},
   {id:'workpiece',ic:'pipe',   nm:'工件管理', sub:'管件参数化建模 · 坡口配置 · 工件库', dual:false},
   {id:'monitor',  ic:'monitor',nm:'工艺管理', sub:'工艺参数 · 现场配置', dual:true},
-  {id:'vis',      ic:'camera', nm:'视觉模块', sub:'多相机视窗 · 扫描参数配置', dual:false},
   {id:'remote',   ic:'chassis',nm:'设备遥控', sub:'移动底盘 / 焊接机器人 · 手动遥控', dual:false},
 ];
 /* 账号库：管理员 / 操作员两种权限（新增用户仅管理员可操作，写入本对象） */
@@ -2033,8 +2040,8 @@ const S={ active:'exec', unit:'A', mode:'手动', navCollapsed:false,
        toast:'', dlg:null,        /* dlg: {mode:'new'|'del'} */
        form:{nm:'', pipeType:'straight', od:'1219', h:'800', eq:true, wt:'18.4', wtA:'18.4', wtB:'22.0',
              bevel:'V', ang:'60', blunt:'1.6', gap:'3.0', arcR:'6.0', arcD:'2.0', straightL:'3.0'} },
-  /* 视觉模块：单相机窗口（机器人A/B + 相机类型两个下拉切换）+ 扫描参数（全局，与工艺模板解耦） */
-  vis:{ tab:'cam', selRobot:'A', selCamType:'coarse',   /* tab: cam|scan；selCamType: coarse|fine|molten */
+  /* 视觉模块：单相机窗口（机器人A/B + 相机类型两个标签切换）*/
+  vis:{ selRobot:'A', selCamType:'coarse',   /* selCamType: coarse|fine|molten */
         camSet:{exposure:12, gain:6, resolution:'1920x1200', dispRatio:100} },
   /* 离线仿真模块（与任务执行/阶段状态机完全解耦，自带工件+工艺选择，即选即算理论路径） */
   ol:{ mouseMode:'select',          /* select | orbit | pan | zoom */
@@ -2069,9 +2076,9 @@ const S={ active:'exec', unit:'A', mode:'手动', navCollapsed:false,
        infoOpen:null,                                   /* 当前展开的参数解释图标 key（PM_PARAM_INFO 字段路径），null 表示全部收起 */
        toast:'' },
 };
-/* 扫描参数（全局，与工艺模板解耦，视觉模块统一配置） */
-const SCANP={ coarseDist:350, coarseShots:3, coarseTol:1.5,
-  fineDist:120, fineOffX:5, fineOffY:0, fineOffZ:0, fineStep:0.5, fineSpeed:30, fineTol:0.3 };
+/* 扫描参数默认值（每个工艺模板各自带一套，挂在模板的 scan 字段下，随模板一起编辑/保存） */
+function defScan(){ return { coarseDist:350, coarseShots:3, coarseTol:1.5,
+  fineDist:120, fineOffX:5, fineOffY:0, fineOffZ:0, fineStep:0.5, fineSpeed:30, fineTol:0.3 }; }
 /* 视觉模块状态：单相机窗口（机器人×相机类型二选一组合）+ 曝光/增益/分辨率/显示比例 */
 const CAM_TYPES=[['coarse','粗定位相机'],['fine','精定位相机'],['molten','熔池相机']];
 const VIS_CAMS=[
@@ -2186,6 +2193,8 @@ const PTEMPLATES=[
   { id:'PT-001', nm:'X70 · 18.4mm V坡对接',
     spec:{odMin:1200, odMax:1250, wtMin:16, wtMax:19, bevel:'V', angMin:58, angMax:62, bluntMin:1.5, bluntMax:1.8, gapMin:2.8, gapMax:3.2}, updated:'2026-08-05',
     global:{ weldDir:'上行', density:2.0, lapStart:8, lapEnd:10 },
+    scan:{ coarseDist:350, coarseShots:3, coarseTol:1.5,
+           fineDist:120, fineOffX:5, fineOffY:0, fineOffZ:0, fineStep:0.5, fineSpeed:30, fineTol:0.3 },
     tack:{ len:30, count:4, startOffset:0, endOffset:0, spacing:0,
            arcParams:{stickout:15,preGas:0.5,postGas:1.0,liftHeight:5,liftSpeed:50},
            zones:[
@@ -2240,6 +2249,8 @@ const PTEMPLATES=[
   { id:'PT-002', nm:'X70 · 21.0mm V坡对接',
     spec:{odMin:1200, odMax:1250, wtMin:20, wtMax:22, bevel:'V', angMin:58, angMax:62, bluntMin:1.5, bluntMax:1.8, gapMin:2.8, gapMax:3.2}, updated:'2026-08-04',
     global:{ weldDir:'上行', density:2.0, lapStart:8, lapEnd:12 },
+    scan:{ coarseDist:380, coarseShots:3, coarseTol:1.5,
+           fineDist:130, fineOffX:5, fineOffY:0, fineOffZ:0, fineStep:0.5, fineSpeed:28, fineTol:0.3 },
     tack:{ len:30, count:6, startOffset:0, endOffset:0, spacing:0,
            arcParams:{stickout:15,preGas:0.5,postGas:1.0,liftHeight:5,liftSpeed:50},
            zones:[
@@ -4155,6 +4166,7 @@ function monitorView(){
       <div class="st">工艺库为空</div><div class="sd">点击右上角「新建」创建第一份工艺模板，或从外部文件「导入」。</div></div>`; }
   else if(p.tab==='basic') body=pmBasicForm();
   else if(p.tab==='weld') body=pmWeldForm();
+  else if(p.tab==='scan') body=pmScanForm();
 
   return `<div class="pm">
     <div class="pm-bar">
@@ -4174,7 +4186,7 @@ function monitorView(){
       </div>
       <div class="pm-detail">
         <div class="pm-tabs">
-          ${tab('basic','params','基本信息')}${tab('weld','route','焊接参数')}
+          ${tab('basic','params','基本信息')}${tab('weld','route','焊接参数')}${tab('scan','radar','扫描参数')}
           <div class="pm-tab-sp">
             <button class="pm-btn" data-pmact="check" ${t?'':'disabled'}>${ic('check')}校验</button>
             <button class="pm-btn primary" data-pmact="save" ${(t&&isAdmin())?'':'disabled'} ${isAdmin()?'':'title="仅管理员可修改工艺库"'}>${ic('save')}保存</button>
@@ -4445,41 +4457,72 @@ function pmWeldForm(){
     </div>
   </div>`;
 }
-/* 扫描参数页 */
-/* ===== 视觉模块：相机视窗 + 扫描参数（全局，与工艺模板解耦） ===== */
+/* 扫描参数页：每个工艺模板各自带一套（粗定位/精定位/二次重建），随模板编辑/保存/导入导出 */
+function pmScanForm(){
+  const d=pmDraft(); if(!d) return '';
+  const sc=d.scan||(d.scan=defScan());
+  const ro=isAdmin()?'':'disabled';
+  const fld=(lb,path,val,unit='')=>`<div class="pm-fld"><label>${lb}${unit?` <i>/ ${unit}</i>`:''}</label>
+    <input class="pm-in" data-pmf="${path}" value="${val}" ${ro}></div>`;
+  return `
+    <div class="pm-grp">${ic('radar')}粗定位参数</div>
+    <div class="pm-fgrid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+      ${fld('拍摄距离','scan.coarseDist',sc.coarseDist,'mm')}
+      ${fld('拍照次数','scan.coarseShots',sc.coarseShots,'次')}
+      ${fld('允许偏差','scan.coarseTol',sc.coarseTol,'mm')}
+    </div>
+
+    <div class="pm-grp">${ic('radar')}精定位参数</div>
+    <div class="pm-fgrid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+      ${fld('扫描距离','scan.fineDist',sc.fineDist,'mm')}
+      ${fld('扫描起始点偏移 X','scan.fineOffX',sc.fineOffX||0,'mm')}
+      ${fld('扫描起始点偏移 Y','scan.fineOffY',sc.fineOffY||0,'mm')}
+      ${fld('扫描起始点偏移 Z','scan.fineOffZ',sc.fineOffZ||0,'mm')}
+      ${fld('采样间距','scan.fineStep',sc.fineStep??0.5,'mm')}
+      ${fld('扫描速度','scan.fineSpeed',sc.fineSpeed,'mm/s')}
+      ${fld('精度阈值','scan.fineTol',sc.fineTol,'mm')}
+    </div>
+
+    <div class="pm-grp">${ic('radar')}二次重建参数</div>
+    <div class="pm-fgrid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+      ${fld('扫描距离','scan.fineDist',sc.fineDist,'mm')}
+      ${fld('扫描起始点偏移 X','scan.fineOffX',sc.fineOffX||0,'mm')}
+      ${fld('扫描起始点偏移 Y','scan.fineOffY',sc.fineOffY||0,'mm')}
+      ${fld('扫描起始点偏移 Z','scan.fineOffZ',sc.fineOffZ||0,'mm')}
+      ${fld('采样间距','scan.fineStep',sc.fineStep??0.5,'mm')}
+      ${fld('扫描速度','scan.fineSpeed',sc.fineSpeed,'mm/s')}
+      ${fld('精度阈值','scan.fineTol',sc.fineTol,'mm')}
+    </div>`;
+}
+/* ===== 视觉模块：相机视窗（扫描参数已随工艺模板迁回工艺管理模块） ===== */
 function visView(){
   const v=S.vis;
-  const tab=(k,icn,nm)=>`<div class="pm-tab ${v.tab===k?'on':''}" data-vistab="${k}">${ic(icn)}${nm}</div>`;
-  const body = v.tab==='cam' ? visCamForm() : visScanForm();
   return `<div class="pm">
     <div class="pm-bar">
-      <div class="pm-ttl">${ic('camera')}视觉模块<small>相机视窗 · 粗/精/熔池监控 · 扫描参数</small></div>
+      <div class="pm-ttl">${ic('camera')}视觉模块<small>相机视窗 · 粗/精/熔池监控</small></div>
     </div>
     <div class="pm-detail" style="flex:1">
-      <div class="pm-tabs">
-        ${tab('cam','camera','视觉窗口')}${tab('scan','radar','扫描参数')}
-      </div>
-      <div class="pm-body">${body}</div>
+      <div class="pm-body" style="display:flex;flex-direction:column">${visCamForm()}</div>
     </div>
     ${v.toast?`<div class="ol-toast">${ic('check')}${v.toast}</div>`:''}
   </div>`;
 }
-/* 视觉窗口：左侧单相机画面（机器人A/B + 相机类型两个下拉选择）+ 右侧当前相机参数占位 */
+/* 视觉窗口：左侧单相机画面（机器人A/B + 相机类型两组标签切换）+ 右侧当前相机参数占位 */
 function visCamForm(){
   const v=S.vis;
   const cs=v.camSet;
   const camKey=v.selCamType+v.selRobot;
   const cur=VIS_CAMS.find(c=>c.k===camKey)||VIS_CAMS[0];
-  const ropts=[['A','A 机器人'],['B','B 机器人']].map(([k,n])=>`<option value="${k}" ${v.selRobot===k?'selected':''}>${n}</option>`).join('');
-  const topts=CAM_TYPES.map(([k,n])=>`<option value="${k}" ${v.selCamType===k?'selected':''}>${n}</option>`).join('');
+  const rtab=(k,nm)=>`<button class="vis-seg-btn ${v.selRobot===k?'on':''}" data-visrobot="${k}">${nm}</button>`;
+  const ttab=(k,icn,nm)=>`<button class="vis-seg-btn ${v.selCamType===k?'on':''}" data-viscam="${k}">${ic(icn)}${nm}</button>`;
   const fld=(lb,path,val,unit='')=>`<div class="pm-fld"><label>${lb}${unit?` <i>/ ${unit}</i>`:''}</label>
     <input class="pm-in" data-visf="${path}" value="${val}"></div>`;
   return `
     <div class="vis-cam-split">
       <div class="vis-cam-win">
-        <div class="pm-fgrid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:12px">
-          <div class="pm-fld"><label>机器人</label><select class="pm-in" id="visSelRobot">${ropts}</select></div>
-          <div class="pm-fld"><label>相机</label><select class="pm-in" id="visSelCamType">${topts}</select></div>
+        <div class="vis-seg-row">
+          <div class="vis-seg-tabs">${rtab('A','A 机器人')}${rtab('B','B 机器人')}</div>
+          <div class="vis-seg-tabs">${ttab('coarse','radar','粗定位')}${ttab('fine','radar','精定位')}${ttab('molten','molten','熔池')}</div>
         </div>
         <div class="view-box" style="margin:0;flex:1">
           ${ic(v.selCamType==='molten'?'molten':'camera')}<div class="vt">${cur.nm} · 画面占位</div>
@@ -4496,55 +4539,17 @@ function visCamForm(){
       </div>
     </div>`;
 }
-/* 扫描参数：全局对象 SCANP，不再挂在具体工艺模板下 */
-function visScanForm(){
-  const sc=SCANP;
-  const fld=(lb,path,val,unit='')=>`<div class="pm-fld"><label>${lb}${unit?` <i>/ ${unit}</i>`:''}</label>
-    <input class="pm-in" data-visf="${path}" value="${val}"></div>`;
-  return `
-    <div class="pm-grp">${ic('radar')}粗定位参数</div>
-    <div class="pm-fgrid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
-      ${fld('拍摄距离','SCANP.coarseDist',sc.coarseDist,'mm')}
-      ${fld('拍照次数','SCANP.coarseShots',sc.coarseShots,'次')}
-      ${fld('允许偏差','SCANP.coarseTol',sc.coarseTol,'mm')}
-    </div>
-
-    <div class="pm-grp">${ic('radar')}精定位参数</div>
-    <div class="pm-fgrid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
-      ${fld('扫描距离','SCANP.fineDist',sc.fineDist,'mm')}
-      ${fld('扫描起始点偏移 X','SCANP.fineOffX',sc.fineOffX||0,'mm')}
-      ${fld('扫描起始点偏移 Y','SCANP.fineOffY',sc.fineOffY||0,'mm')}
-      ${fld('扫描起始点偏移 Z','SCANP.fineOffZ',sc.fineOffZ||0,'mm')}
-      ${fld('采样间距','SCANP.fineStep',sc.fineStep??0.5,'mm')}
-      ${fld('扫描速度','SCANP.fineSpeed',sc.fineSpeed,'mm/s')}
-      ${fld('精度阈值','SCANP.fineTol',sc.fineTol,'mm')}
-    </div>
-
-    <div class="pm-grp">${ic('radar')}二次重建参数</div>
-    <div class="pm-fgrid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
-      ${fld('扫描距离','SCANP.fineDist',sc.fineDist,'mm')}
-      ${fld('扫描起始点偏移 X','SCANP.fineOffX',sc.fineOffX||0,'mm')}
-      ${fld('扫描起始点偏移 Y','SCANP.fineOffY',sc.fineOffY||0,'mm')}
-      ${fld('扫描起始点偏移 Z','SCANP.fineOffZ',sc.fineOffZ||0,'mm')}
-      ${fld('采样间距','SCANP.fineStep',sc.fineStep??0.5,'mm')}
-      ${fld('扫描速度','SCANP.fineSpeed',sc.fineSpeed,'mm/s')}
-      ${fld('精度阈值','SCANP.fineTol',sc.fineTol,'mm')}
-    </div>`;
-}
 let visToastTimer;
 function visToast(txt){ S.vis.toast=txt; clearTimeout(visToastTimer);
   visToastTimer=setTimeout(()=>{S.vis.toast='';render();},1800); }
 function bindVisModule(){
   const v=S.vis;
-  document.querySelectorAll('[data-vistab]').forEach(b=>b.onclick=()=>{ v.tab=b.dataset.vistab; render(); });
-  const selRobot=document.getElementById('visSelRobot');
-  if(selRobot) selRobot.onchange=()=>{ v.selRobot=selRobot.value; render(); };
-  const selCamType=document.getElementById('visSelCamType');
-  if(selCamType) selCamType.onchange=()=>{ v.selCamType=selCamType.value; render(); };
+  document.querySelectorAll('[data-visrobot]').forEach(b=>b.onclick=()=>{ v.selRobot=b.dataset.visrobot; render(); });
+  document.querySelectorAll('[data-viscam]').forEach(b=>b.onclick=()=>{ v.selCamType=b.dataset.viscam; render(); });
   document.querySelectorAll('[data-visf]').forEach(el=>{
     el.onchange=()=>{
       const path=el.dataset.visf.split('.');
-      let o = path[0]==='SCANP' ? SCANP : v.camSet;
+      let o = v.camSet;
       for(let i=1;i<path.length-1;i++) o=o[path[i]];
       const lastKey=path[path.length-1];
       const val=el.value;
@@ -6091,6 +6096,7 @@ function pmCreate(){
     id, nm:nm.trim(), updated:'2026-08-11',
     spec,
     global:{weldDir:'上行',density:2.0,lapStart:8,lapEnd:10},
+    scan:defScan(),
     tack:{len:30,count:4,startOffset:0,endOffset:0,spacing:0,
           arcParams:{stickout:15,preGas:0.5,postGas:1.0,liftHeight:5,liftSpeed:50},
           zones:[
@@ -6121,6 +6127,7 @@ function pmImport(){
     id, nm:file.replace(/\.wps$/,'')+'（导入）', updated:'2026-08-11',
     spec:{odMin:1200,odMax:1250,wtMin:16,wtMax:19,bevel:'V'},
     global:{weldDir:'上行',density:2.0,lapStart:8,lapEnd:10},
+    scan:defScan(),
     tack:{len:30,count:4,startOffset:0,endOffset:0,spacing:0,
           arcParams:{stickout:15,preGas:0.5,postGas:1.0,liftHeight:5,liftSpeed:50},
           zones:[
