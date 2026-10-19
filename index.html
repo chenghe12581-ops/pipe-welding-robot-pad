@@ -42,9 +42,9 @@ svg{display:block}
 .topbar{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:12px;padding:0 16px;
   background:linear-gradient(100deg,var(--blue-d),var(--blue) 55%,var(--blue2));color:#fff;position:relative;z-index:10}
 .brand{display:flex;align-items:center;gap:11px}
-.brand .mark{width:40px;height:40px;border-radius:11px;background:rgba(255,255,255,.16);
+.brand .mark{width:40px;height:40px;border-radius:11px;background:rgba(5,20,46,.55);box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);
   display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
-.brand .mark svg{width:24px;height:24px;stroke-width:1.9}
+.brand .mark img{width:29px;height:29px;object-fit:contain}
 .brand .tt b{font-size:17px;font-weight:700;letter-spacing:.5px;display:block;line-height:1.2}
 .brand .tt span{font-size:11px;opacity:.72;letter-spacing:2.5px}
 .top-status{display:flex;gap:9px;margin-left:6px}
@@ -1823,8 +1823,8 @@ select.pm-in{cursor:pointer;appearance:none;background-image:url("data:image/svg
 .login-left::before{content:'';position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.07)}
 .login-left::after{content:'';position:absolute;left:-40px;bottom:-70px;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,.06)}
 .ll-top{display:flex;align-items:center;gap:12px;position:relative;z-index:1}
-.ll-mark{width:48px;height:48px;border-radius:13px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
-.ll-mark svg{width:27px;height:27px;stroke-width:1.8}
+.ll-mark{width:48px;height:48px;border-radius:13px;background:rgba(5,20,46,.55);box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.ll-mark img{width:35px;height:35px;object-fit:contain}
 .ll-tt b{font-size:18px;font-weight:700;display:block;line-height:1.25}
 .ll-tt span{font-size:11px;opacity:.72;letter-spacing:2.5px}
 .ll-graphic{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;flex:1}
@@ -2571,7 +2571,7 @@ function loginView(){
   const a=S.auth;
   return `<div class="login-wrap">
     <div class="login-left">
-      <div class="ll-top"><div class="ll-mark">${ic('weld')}</div>
+      <div class="ll-top"><div class="ll-mark"><img src="image/logo.png" alt="logo"></div>
         <div class="ll-tt"><b>移动焊接机器人</b><span>PIPE WELDING</span></div></div>
       <div class="ll-graphic"><img src="image/登录页面.PNG" alt=""></div>
       <div class="ll-ver">RobimWeld_Pipe V1.0.0</div>
@@ -2626,7 +2626,7 @@ function logout(){
 }
 function topbar(){
   return `<div class="topbar">
-    <div class="brand"><div class="mark">${ic('weld')}</div>
+    <div class="brand"><div class="mark"><img src="image/logo.png" alt="logo"></div>
       <div class="tt"><b>移动焊接机器人</b><span>PIPE WELDING</span></div></div>
     <div class="top-status">
       ${unitChip('A')}${unitChip('B')}
