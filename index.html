@@ -716,21 +716,18 @@ svg{display:block}
 .joy-stick{position:relative;border-radius:50%;background:var(--white);border:1.5px solid var(--line);
   box-shadow:var(--shadow-sm),inset 0 3px 12px rgba(31,79,168,.07);
   touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
-.joy-move{width:200px;height:200px}
-.joy-rot{width:148px;height:148px}
-.joy-stick::before{content:'';position:absolute;inset:13px;border-radius:50%;border:1.5px dashed var(--line2)}
-.joy-rot::before{inset:11px}
+.joy-move{width:264px;height:264px}
+.joy-stick::before{content:'';position:absolute;inset:15px;border-radius:50%;border:1.5px dashed var(--line2)}
 .joy-stick::after{content:'';position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:var(--line2)}
-.joy-tick{position:absolute;z-index:1;font-size:12px;font-weight:600;color:var(--txt3);letter-spacing:1px;transition:.15s;pointer-events:none}
-.tk-up{top:7px;left:50%;transform:translateX(-50%)}
-.tk-down{bottom:7px;left:50%;transform:translateX(-50%)}
-.tk-left{left:9px;top:50%;transform:translateY(-50%)}
-.tk-right{right:9px;top:50%;transform:translateY(-50%)}
-.joy-knob{position:absolute;left:50%;top:50%;z-index:2;width:62px;height:62px;margin:-31px 0 0 -31px;border-radius:50%;pointer-events:none;
+.joy-tick{position:absolute;z-index:1;font-size:12.5px;font-weight:600;color:var(--txt3);letter-spacing:1px;transition:.15s;pointer-events:none}
+.tk-up{top:9px;left:50%;transform:translateX(-50%)}
+.tk-down{bottom:9px;left:50%;transform:translateX(-50%)}
+.tk-left{left:11px;top:50%;transform:translateY(-50%)}
+.tk-right{right:11px;top:50%;transform:translateY(-50%)}
+.joy-knob{position:absolute;left:50%;top:50%;z-index:2;width:74px;height:74px;margin:-37px 0 0 -37px;border-radius:50%;pointer-events:none;
   background:radial-gradient(circle at 32% 28%,#7fa6ee,var(--blue) 58%,var(--blue-d));
   box-shadow:0 7px 16px rgba(47,107,216,.42),inset 0 -4px 8px rgba(31,79,168,.45),inset 0 3px 6px rgba(255,255,255,.4);
   transition:transform .2s cubic-bezier(.2,.9,.3,1.2);will-change:transform}
-.joy-rot .joy-knob{width:52px;height:52px;margin:-26px 0 0 -26px}
 .joy-stick.active{border-color:var(--blue2);box-shadow:0 0 0 4px rgba(74,134,240,.14),var(--shadow-sm),inset 0 3px 12px rgba(31,79,168,.07)}
 .joy-stick.active .joy-knob{transition:none;background:radial-gradient(circle at 32% 28%,#6b97ec,var(--blue-d) 58%,#173e85)}
 .joy-stick.d-up .tk-up,.joy-stick.d-down .tk-down,.joy-stick.d-left .tk-left,.joy-stick.d-right .tk-right,
@@ -4070,17 +4067,10 @@ function chassisView(){
     <div class="joy-box">
       <div class="joy-stick joy-move ${en?'':'locked'}" id="joyMove">
         <span class="joy-tick tk-up">前进</span><span class="joy-tick tk-down">后退</span>
-        <span class="joy-tick tk-left">左移</span><span class="joy-tick tk-right">右移</span>
-        <div class="joy-knob"></div>
-      </div>
-      <div class="joy-cap">平移</div>
-    </div>
-    <div class="joy-box">
-      <div class="joy-stick joy-rot ${en?'':'locked'}" id="joyRot">
         <span class="joy-tick tk-left">左转</span><span class="joy-tick tk-right">右转</span>
         <div class="joy-knob"></div>
       </div>
-      <div class="joy-cap">旋转</div>
+      <div class="joy-cap">行走</div>
     </div>
   </div>`;
   const spd=`<div class="speed-seg">
@@ -4105,9 +4095,9 @@ function chassisView(){
     </div>
   </div>`;
 }
-/* 虚拟摇杆绑定：isRot=旋转模式（仅水平），否则平移八向取主轴；
-   拖动中直接操作 DOM 不回渲染，松开回弹并复位 */
-function bindJoy(el,isRot,onDir){
+/* 虚拟摇杆绑定（阿克曼底盘）：纵轴=前进/后退，横轴=左转/右转，
+   斜推=行走+转向组合（如左上=前进+左转）；拖动中直接操作 DOM 不回渲染，松开回弹复位 */
+function bindJoy(el,onDir){
   if(!el) return;
   const knob=el.querySelector('.joy-knob');
   let pid=null;
@@ -4115,24 +4105,20 @@ function bindJoy(el,isRot,onDir){
   const apply=dir=>{
     onDir(dir);
     el.classList.remove('d-up','d-down','d-left','d-right','d-rl','d-rr');
-    if(dir) el.classList.add('d-'+dir);
+    if(dir) dir.split('+').forEach(p=>el.classList.add('d-'+p));
   };
   const handle=e=>{
     if(e.pointerId!==pid) return;
     const r=el.getBoundingClientRect();
-    const maxD=r.width/2-knob.offsetWidth/2-8;
+    const maxD=r.width/2-knob.offsetWidth/2-10;
     let dx=e.clientX-(r.left+r.width/2), dy=e.clientY-(r.top+r.height/2);
     const d=Math.hypot(dx,dy);
     if(d>maxD){dx*=maxD/d;dy*=maxD/d;}
-    if(isRot) dy=0;
     setKnob(dx,dy);
-    const dead=maxD*.32; let dir='';
-    if(isRot){
-      if(dx<-dead) dir='rl'; else if(dx>dead) dir='rr';
-    } else if(Math.hypot(dx,dy)>dead){
-      dir=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
-    }
-    apply(dir);
+    const dead=maxD*.28;
+    const fwd=dy<-dead?'up':(dy>dead?'down':'');
+    const turn=dx<-dead?'rl':(dx>dead?'rr':'');
+    apply(fwd&&turn?fwd+'+'+turn:(fwd||turn));
   };
   const reset=e=>{
     if(e&&e.pointerId!==pid) return;
@@ -4159,15 +4145,8 @@ function bindChassis(){
     S.rm.tab=b.dataset.rmtab; c.moving=''; render();});
   const en=document.getElementById('enBtn');
   if(en) en.onclick=()=>{c.enabled=!c.enabled; if(!c.enabled)c.moving=''; render();};
-  /* 虚拟摇杆：平移主摇杆 + 旋转副摇杆（互斥取最新方向，松开即停） */
-  bindJoy(document.getElementById('joyMove'),false,dir=>{
-    if(dir) c.moving=dir;
-    else if(c.moving==='up'||c.moving==='down'||c.moving==='left'||c.moving==='right') c.moving='';
-  });
-  bindJoy(document.getElementById('joyRot'),true,dir=>{
-    if(dir) c.moving=dir;
-    else if(c.moving==='rl'||c.moving==='rr') c.moving='';
-  });
+  /* 虚拟摇杆（阿克曼）：纵轴前进/后退，横轴转向，斜推为组合指令 */
+  bindJoy(document.getElementById('joyMove'),dir=>{ c.moving=dir; });
   document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{c.speed=+b.dataset.speed;render();});
   document.querySelectorAll('[data-adj]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.adj;
