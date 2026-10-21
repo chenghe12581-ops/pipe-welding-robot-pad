@@ -217,6 +217,14 @@ svg{display:block}
 .dialog h3{font-size:19px;font-weight:700;margin-bottom:8px}
 .dialog p{font-size:14px;color:var(--txt2);line-height:1.6;margin-bottom:22px}
 .dialog .dg-btns{display:flex;gap:12px}
+/* 位置数据弹窗：距离分项列表 */
+.pos-dialog p{margin-bottom:6px}
+.pd-list{margin:12px 0 18px;background:var(--gray-bg);border:1px solid var(--line);border-radius:12px;padding:4px 14px}
+.pd-row{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line)}
+.pd-row:last-child{border-bottom:none}
+.pd-lbl{font-size:13.5px;font-weight:600;color:var(--txt2)}
+.pd-val{font-size:15px;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums}
+.pd-val.pd-main{color:var(--blue);font-size:16px}
 .dialog .dg-btns button{flex:1;height:46px;border-radius:12px;font-size:15px;font-weight:600;
   display:flex;align-items:center;justify-content:center;gap:7px}
 .dialog .dg-btns button svg{width:18px;height:18px;stroke-width:2;flex:0 0 auto}
@@ -5181,7 +5189,6 @@ function olCompWin(){
   const frameSeg=frames.map(([k,n])=>`<button class="${w.frame===k?'on':''}" data-compframe="${k}">${n}</button>`).join('');
   const posed = w.x!=null;
   const styl = posed?`style="left:${w.x}px;top:${w.y}px"`:'';
-  const dirty=compPosDirty(w.target);
   return `<div class="ol-fwin ${posed?'':'dock-right'}" id="olCompWin" data-fwin="comp" ${styl}>
     <div class="fw-head" data-fwgrip="comp">
       <span class="fh-ic">${ic('move3d')}</span><span class="fh-t">组件位置修改</span>
@@ -5200,7 +5207,7 @@ function olCompWin(){
                 ['y','Y',pos.y,'y','Ry',pos.ry],
                 ['z','Z',pos.z,'z','Rz',pos.rz]],'cw_')}
       <div class="fw-foot cw-foot">
-        <span class="cw-src ${dirty?'dirty':''}">${dirty?'已手动修改':'默认理论站位'}</span>
+        <button class="fb-ghost cw-posdata" data-posdata title="显示相对管道坐标系的距离">${ic('goto')}显示位置数据</button>
         <button class="fb-ghost cw-rst" data-comprst title="恢复到默认理论站位">${ic('reset')}重置</button>
       </div>
     </div>
@@ -5267,7 +5274,7 @@ function fwGrid(pairs,idp){
    不再从本模块任何入口触发——供后续改造任务执行模块时复用，详见记忆 project_program_edit_reuse。 */
 function olPopup(){
   const p=S.ol.popup;
-  const map={reach:reachPopup, replan:replanPopup};
+  const map={reach:reachPopup, replan:replanPopup, posdata:posDataPopup};
   const fn=map[p&&p.type]; if(!fn) return '';
   return `<div class="mask" id="olPopMask">${fn(p)}</div>`;
 }
@@ -5278,6 +5285,23 @@ function replanPopup(){
     <p>重新规划会用新结果覆盖当前程序组。可沿用或更换工件/工艺模板。确认继续？</p>
     <div class="dg-btns"><button class="dg-cancel" data-act="pop-close">取消</button>
       <button class="dg-ok" data-act="replan-go" style="background:var(--warn)">继续并选择</button></div></div>`;
+}
+/* 显示位置数据弹窗：当前选中底盘相对管道坐标系的各向分量距离与直线距离 */
+function posDataPopup(){
+  const t=S.ol.fwin.comp.target, p=COMP_POS[t];
+  const nm=(COMP_TG.find(x=>x[0]===t)||['','',''])[2];
+  const v=a=>{const n=parseFloat(p[a]);return isNaN(n)?0:n;};
+  const x=v('x'),y=v('y'),z=v('z');
+  const hor=Math.sqrt(x*x+y*y), line=Math.sqrt(x*x+y*y+z*z);
+  const row=(lbl,val,cls)=>`<div class="pd-row"><span class="pd-lbl">${lbl}</span><span class="pd-val ${cls||''}">${val.toFixed(1)} mm</span></div>`;
+  return `<div class="dialog pos-dialog"><div class="dg-ic">${ic('goto')}</div>
+    <h3>位置数据 · ${nm}</h3>
+    <p>相对<b>管道坐标系</b>的距离（当前窗口显示值）</p>
+    <div class="pd-list">
+      ${row('X 方向距离',x)}${row('Y 方向距离',y)}${row('Z 方向距离',z)}
+      ${row('水平面距离',hor)}${row('空间直线距离',line,'pd-main')}
+    </div>
+    <div class="dg-btns"><button class="dg-ok" data-act="pop-close">${ic('check')}关闭</button></div></div>`;
 }
 /* 参数说明内容迁移至工艺参数管理模块（PM_PARAM_INFO），以字段路径为key，供参数解释图标查阅 */
 /* 程序对象 增/删/复制/重命名 弹窗 */
@@ -6398,6 +6422,10 @@ function bindOffline(){
     collectCompPos();
     o.fwin.comp.frame=b.dataset.compframe;render();});
   const crst=document.querySelector('[data-comprst]'); if(crst) crst.onclick=()=>resetCompPos();
+  const cpd=document.querySelector('[data-posdata]'); if(cpd) cpd.onclick=()=>{
+    collectCompPos();                       /* 先读回手改值，弹窗显示当前最新数据 */
+    S.ol.popup={type:'posdata'};render();
+  };
   document.querySelectorAll('[data-robtab]').forEach(b=>b.onclick=()=>{o.fwin.robot.tab=b.dataset.robtab;render();});
   document.querySelectorAll('[data-robmode]').forEach(b=>b.onclick=()=>{o.fwin.robot.mode=b.dataset.robmode;render();});
   document.querySelectorAll('[data-robframe]').forEach(b=>b.onclick=()=>{o.fwin.robot.frame=b.dataset.robframe;render();});
