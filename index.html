@@ -217,14 +217,9 @@ svg{display:block}
 .dialog h3{font-size:19px;font-weight:700;margin-bottom:8px}
 .dialog p{font-size:14px;color:var(--txt2);line-height:1.6;margin-bottom:22px}
 .dialog .dg-btns{display:flex;gap:12px}
-/* 位置数据弹窗：距离分项列表 */
-.pos-dialog p{margin-bottom:6px}
-.pd-list{margin:12px 0 18px;background:var(--gray-bg);border:1px solid var(--line);border-radius:12px;padding:4px 14px}
-.pd-row{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line)}
-.pd-row:last-child{border-bottom:none}
-.pd-lbl{font-size:13.5px;font-weight:600;color:var(--txt2)}
-.pd-val{font-size:15px;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums}
-.pd-val.pd-main{color:var(--blue);font-size:16px}
+/* 位置数据弹窗：只读输入框置灰不可聚焦 */
+.pos-dialog p{margin-bottom:10px}
+.pos-dialog .fw-inp[readonly]{color:var(--txt);background:var(--gray-bg);cursor:default}
 .dialog .dg-btns button{flex:1;height:46px;border-radius:12px;font-size:15px;font-weight:600;
   display:flex;align-items:center;justify-content:center;gap:7px}
 .dialog .dg-btns button svg{width:18px;height:18px;stroke-width:2;flex:0 0 auto}
@@ -5286,20 +5281,19 @@ function replanPopup(){
     <div class="dg-btns"><button class="dg-cancel" data-act="pop-close">取消</button>
       <button class="dg-ok" data-act="replan-go" style="background:var(--warn)">继续并选择</button></div></div>`;
 }
-/* 显示位置数据弹窗：当前选中底盘相对管道坐标系的各向分量距离与直线距离 */
+/* 显示位置数据弹窗：当前选中底盘相对管道坐标系的位姿（与浮窗输入框一致的两列三行布局，只读） */
 function posDataPopup(){
   const t=S.ol.fwin.comp.target, p=COMP_POS[t];
   const nm=(COMP_TG.find(x=>x[0]===t)||['','',''])[2];
-  const v=a=>{const n=parseFloat(p[a]);return isNaN(n)?0:n;};
-  const x=v('x'),y=v('y'),z=v('z');
-  const hor=Math.sqrt(x*x+y*y), line=Math.sqrt(x*x+y*y+z*z);
-  const row=(lbl,val,cls)=>`<div class="pd-row"><span class="pd-lbl">${lbl}</span><span class="pd-val ${cls||''}">${val.toFixed(1)} mm</span></div>`;
+  const cell=(cls,label,val)=>`<div class="fw-row"><span class="fr-ax ${cls}">${label}</span><input class="fw-inp" value="${p[label.toLowerCase()]}" readonly tabindex="-1"></div>`;
   return `<div class="dialog pos-dialog"><div class="dg-ic">${ic('goto')}</div>
     <h3>位置数据 · ${nm}</h3>
-    <p>相对<b>管道坐标系</b>的距离（当前窗口显示值）</p>
-    <div class="pd-list">
-      ${row('X 方向距离',x)}${row('Y 方向距离',y)}${row('Z 方向距离',z)}
-      ${row('水平面距离',hor)}${row('空间直线距离',line,'pd-main')}
+    <p>相对<b>管道坐标系</b>（当前窗口显示值，只读）</p>
+    <div class="fw-grid-hd"><span>${ic('move3d')}位置 (mm)</span><span>${ic('reset')}朝向 (°)</span></div>
+    <div class="fw-grid">
+      ${cell('x','X',p.x)}${cell('x','Rx',p.rx)}
+      ${cell('y','Y',p.y)}${cell('y','Ry',p.ry)}
+      ${cell('z','Z',p.z)}${cell('z','Rz',p.rz)}
     </div>
     <div class="dg-btns"><button class="dg-ok" data-act="pop-close">${ic('check')}关闭</button></div></div>`;
 }
