@@ -227,6 +227,11 @@ svg{display:block}
 .pos-dialog .fw-row .fr-ax.y{background:rgba(31,157,90,.12);color:#1f9d5a}
 .pos-dialog .fw-row .fr-ax.z{background:rgba(47,107,216,.12);color:#2f6bd8}
 .pos-dialog .fw-inp[readonly]{background:var(--gray-bg);border:1px solid var(--line2);color:var(--txt);font-weight:700;cursor:default}
+/* 示教器占位页：返回按钮 */
+.tp-back{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;padding:0 28px;margin:18px auto 0;
+  border-radius:11px;background:linear-gradient(135deg,#4a86f0,#2f6bd8);color:#fff;font-size:14.5px;font-weight:700;transition:.15s}
+.tp-back svg{width:16px;height:16px;stroke-width:2.2}
+.tp-back:hover{filter:brightness(1.06)}
 .dialog .dg-btns button{flex:1;height:46px;border-radius:12px;font-size:15px;font-weight:600;
   display:flex;align-items:center;justify-content:center;gap:7px}
 .dialog .dg-btns button svg{width:18px;height:18px;stroke-width:2;flex:0 0 auto}
@@ -4011,7 +4016,7 @@ function remoteView(){
   const tabs=RM_TABS.map(([k,icn,nm,sub])=>`<button class="${t===k?'on':''}" data-rmtab="${k}">
     ${ic(icn)}<div class="rt-m"><div class="rt-nm">${nm}</div><div class="rt-sub">${sub}</div></div>
     </button>`).join('');
-  const body = t==='chassis' ? chassisView() : robotRemoteView();
+  const body = t==='tp' ? tpView() : (t==='chassis' ? chassisView() : robotRemoteView());
   return `<div class="remote">
     ${header}
     <div class="rm-tabs">${tabs}</div>
@@ -4054,6 +4059,20 @@ function robotRemoteView(){
         <button class="adj-btn ${r.torchUp?'on':''}" data-radj="torchUp">${ic('up')}<div>自动抬枪<span class="sub">${r.torchUp?'已抬起':'焊枪离开'}</span></div></button>
         <button class="adj-btn ${r.gasTest?'on':''}" data-radj="gasTest">${ic('gas')}<div>气体测试<span class="sub">${r.gasTest?'送气中':'保护气检测'}</span></div></button>
         <button class="adj-btn ${r.wireTest?'on':''}" data-radj="wireTest">${ic('wave')}<div>送丝测试<span class="sub">${r.wireTest?'送丝中':'点动试送丝'}</span></div></button>
+        <button class="adj-btn" data-tp>${ic('teach')}<div>示教器<span class="sub">进入示教页面</span></div></button>
+      </div>
+    </div>
+  </div>`;
+}
+/* 机器人示教器占位页：后续在此提供手动示教/点位记录/程序编辑 */
+function tpView(){
+  return `<div class="chassis">
+    <div class="ch-card" style="flex:1;align-items:center;justify-content:center">
+      <div class="pm-soon">
+        <div class="si">${ic('teach')}</div>
+        <div class="st">机器人示教器</div>
+        <div class="sd">示教器页面建设中，当前为占位页。后续将在此提供手动示教、点位记录与程序编辑功能。</div>
+        <button class="tp-back" data-tpback>${ic('left')}返回设备遥控</button>
       </div>
     </div>
   </div>`;
@@ -4069,6 +4088,8 @@ function bindRobotRemote(){
     r[a]=!r[a];
     render();
   });
+  const tp=document.querySelector('[data-tp]'); if(tp) tp.onclick=()=>{S.rm.tab='tp';render();};
+  const tb=document.querySelector('[data-tpback]'); if(tb) tb.onclick=()=>{S.rm.tab='robot';render();};
 }
 function chassisView(){
   const c=S.ch;
