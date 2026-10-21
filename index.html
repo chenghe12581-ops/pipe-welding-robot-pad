@@ -710,19 +710,34 @@ svg{display:block}
 .enable-btn:hover{border-color:var(--blue2)}
 .enable-btn.on{background:linear-gradient(100deg,#1f8a4c,#27ae60);border-color:#27ae60;color:#fff;box-shadow:0 4px 10px rgba(39,174,96,.3)}
 
-/* 方向按钮九宫格（无原地旋转） */
-.dpad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,minmax(64px,1fr));gap:14px;flex:1;min-height:0}
-.mv{border-radius:16px;background:var(--white);border:1.5px solid var(--line);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;overflow:hidden;
-  color:var(--txt2);font-size:16px;font-weight:600;transition:.13s;user-select:none;min-height:0}
-.mv svg{width:38px;height:38px;stroke-width:2}
-.mv.up{grid-column:2;grid-row:1}.mv.left{grid-column:1;grid-row:2}
-.mv.stop{grid-column:2;grid-row:2}.mv.right{grid-column:3;grid-row:2}.mv.down{grid-column:2;grid-row:3}
-.mv.rl{grid-column:1;grid-row:3}.mv.rr{grid-column:3;grid-row:3}
-.mv:not(.stop):active,.mv.active{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 6px 16px rgba(47,107,216,.35)}
-.mv.stop{background:#fdeded;border-color:#f3c0c0;color:var(--err)}
-.mv.stop:hover{background:var(--err);color:#fff;border-color:var(--err)}
-.dpad.locked{opacity:.4;pointer-events:none;filter:grayscale(.4)}
+/* 虚拟摇杆（行走遥控）：平移大摇杆 + 旋转小摇杆 */
+.joy-row{display:flex;flex:1;min-height:0;align-items:center;justify-content:center;gap:26px;padding:4px 0}
+.joy-box{display:flex;flex-direction:column;align-items:center;gap:10px;flex:0 0 auto}
+.joy-stick{position:relative;border-radius:50%;background:var(--white);border:1.5px solid var(--line);
+  box-shadow:var(--shadow-sm),inset 0 3px 12px rgba(31,79,168,.07);
+  touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+.joy-move{width:200px;height:200px}
+.joy-rot{width:148px;height:148px}
+.joy-stick::before{content:'';position:absolute;inset:13px;border-radius:50%;border:1.5px dashed var(--line2)}
+.joy-rot::before{inset:11px}
+.joy-stick::after{content:'';position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:var(--line2)}
+.joy-tick{position:absolute;z-index:1;font-size:12px;font-weight:600;color:var(--txt3);letter-spacing:1px;transition:.15s;pointer-events:none}
+.tk-up{top:7px;left:50%;transform:translateX(-50%)}
+.tk-down{bottom:7px;left:50%;transform:translateX(-50%)}
+.tk-left{left:9px;top:50%;transform:translateY(-50%)}
+.tk-right{right:9px;top:50%;transform:translateY(-50%)}
+.joy-knob{position:absolute;left:50%;top:50%;z-index:2;width:62px;height:62px;margin:-31px 0 0 -31px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle at 32% 28%,#7fa6ee,var(--blue) 58%,var(--blue-d));
+  box-shadow:0 7px 16px rgba(47,107,216,.42),inset 0 -4px 8px rgba(31,79,168,.45),inset 0 3px 6px rgba(255,255,255,.4);
+  transition:transform .2s cubic-bezier(.2,.9,.3,1.2);will-change:transform}
+.joy-rot .joy-knob{width:52px;height:52px;margin:-26px 0 0 -26px}
+.joy-stick.active{border-color:var(--blue2);box-shadow:0 0 0 4px rgba(74,134,240,.14),var(--shadow-sm),inset 0 3px 12px rgba(31,79,168,.07)}
+.joy-stick.active .joy-knob{transition:none;background:radial-gradient(circle at 32% 28%,#6b97ec,var(--blue-d) 58%,#173e85)}
+.joy-stick.d-up .tk-up,.joy-stick.d-down .tk-down,.joy-stick.d-left .tk-left,.joy-stick.d-right .tk-right,
+.joy-stick.d-rl .tk-left,.joy-stick.d-rr .tk-right{color:var(--blue);font-weight:700}
+.joy-stick.active~.joy-cap{color:var(--blue)}
+.joy-stick.locked{opacity:.4;filter:grayscale(.4)}
+.joy-cap{font-size:12.5px;font-weight:700;color:var(--txt3);letter-spacing:3px}
 
 /* 速度档位 */
 .speed-seg{display:flex;gap:0;margin-top:16px;background:var(--gray-bg);border-radius:12px;padding:5px}
@@ -2008,7 +2023,7 @@ const S={ active:'exec', unit:'A', mode:'手动', navCollapsed:false,
       B:{ backend:true, cart:true, battery:92, robot:true, cams:{coarse:true, fine:true, molten:true} },
     } },
   /* 底盘遥控模块 */
-  ch:{ enabled:false, speed:1, moving:'', leveled:false, grid:false },
+  ch:{ enabled:false, speed:0, moving:'', leveled:false, grid:false },
   /* 焊接机器人遥控模块：pose=transport缩回原点(运输状态)/work展开原点(工作状态) */
   rob:{ pose:'work', torchUp:false, gasTest:false, wireTest:false },
   /* 设备遥控：当前遥控的设备（chassis 移动底盘 / robot 焊接机器人） */
@@ -4051,21 +4066,31 @@ function bindRobotRemote(){
 function chassisView(){
   const c=S.ch;
   const en=c.enabled;
-  const mv=(dir,icn,nm)=>`<button class="mv ${dir} ${c.moving===dir?'active':''}" data-move="${dir}">${ic(icn)}<span>${nm}</span></button>`;
-  const dpad=`<div class="dpad ${en?'':'locked'}">
-    ${mv('up','up','前进')}${mv('left','left','左移')}
-    <button class="mv stop" data-move="stop">${ic('stop')}<span>停止</span></button>
-    ${mv('right','right','右移')}${mv('down','down','后退')}
-    ${mv('rl','rotL','左转')}${mv('rr','rotR','右转')}</div>`;
+  const sticks=`<div class="joy-row">
+    <div class="joy-box">
+      <div class="joy-stick joy-move ${en?'':'locked'}" id="joyMove">
+        <span class="joy-tick tk-up">前进</span><span class="joy-tick tk-down">后退</span>
+        <span class="joy-tick tk-left">左移</span><span class="joy-tick tk-right">右移</span>
+        <div class="joy-knob"></div>
+      </div>
+      <div class="joy-cap">平移</div>
+    </div>
+    <div class="joy-box">
+      <div class="joy-stick joy-rot ${en?'':'locked'}" id="joyRot">
+        <span class="joy-tick tk-left">左转</span><span class="joy-tick tk-right">右转</span>
+        <div class="joy-knob"></div>
+      </div>
+      <div class="joy-cap">旋转</div>
+    </div>
+  </div>`;
   const spd=`<div class="speed-seg">
-    <button class="${c.speed===0?'on':''}" data-speed="0">微调</button>
-    <button class="${c.speed===1?'on':''}" data-speed="1">低速</button>
-    <button class="${c.speed===2?'on':''}" data-speed="2">常速</button></div>`;
+    <button class="${c.speed===0?'on':''}" data-speed="0">低速</button>
+    <button class="${c.speed===1?'on':''}" data-speed="1">高速</button></div>`;
   return `<div class="chassis">
     <div class="ch-card col-move">
       <div class="cc-title cc-title-flex"><span><span class="bar"></span>行走遥控</span>
         <button class="enable-btn ${en?'on':''}" id="enBtn">${ic('power')}${en?'使能已开启':'点击使能'}</button></div>
-      ${dpad}${spd}
+      ${sticks}${spd}
     </div>
     <div class="col-right">
       <div class="ch-card" style="flex:0 0 auto">
@@ -4080,6 +4105,50 @@ function chassisView(){
     </div>
   </div>`;
 }
+/* 虚拟摇杆绑定：isRot=旋转模式（仅水平），否则平移八向取主轴；
+   拖动中直接操作 DOM 不回渲染，松开回弹并复位 */
+function bindJoy(el,isRot,onDir){
+  if(!el) return;
+  const knob=el.querySelector('.joy-knob');
+  let pid=null;
+  const setKnob=(x,y)=>{knob.style.transform='translate('+x+'px,'+y+'px)';};
+  const apply=dir=>{
+    onDir(dir);
+    el.classList.remove('d-up','d-down','d-left','d-right','d-rl','d-rr');
+    if(dir) el.classList.add('d-'+dir);
+  };
+  const handle=e=>{
+    if(e.pointerId!==pid) return;
+    const r=el.getBoundingClientRect();
+    const maxD=r.width/2-knob.offsetWidth/2-8;
+    let dx=e.clientX-(r.left+r.width/2), dy=e.clientY-(r.top+r.height/2);
+    const d=Math.hypot(dx,dy);
+    if(d>maxD){dx*=maxD/d;dy*=maxD/d;}
+    if(isRot) dy=0;
+    setKnob(dx,dy);
+    const dead=maxD*.32; let dir='';
+    if(isRot){
+      if(dx<-dead) dir='rl'; else if(dx>dead) dir='rr';
+    } else if(Math.hypot(dx,dy)>dead){
+      dir=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
+    }
+    apply(dir);
+  };
+  const reset=e=>{
+    if(e&&e.pointerId!==pid) return;
+    pid=null; el.classList.remove('active'); setKnob(0,0); apply('');
+  };
+  el.addEventListener('pointerdown',e=>{
+    if(!S.ch.enabled) return;
+    pid=e.pointerId;
+    try{el.setPointerCapture(pid);}catch(_){}
+    el.classList.add('active');
+    handle(e);
+  });
+  el.addEventListener('pointermove',handle);
+  el.addEventListener('pointerup',reset);
+  el.addEventListener('pointercancel',reset);
+}
 function bindChassis(){
   const c=S.ch;
   /* 控制单元切换 */
@@ -4090,13 +4159,14 @@ function bindChassis(){
     S.rm.tab=b.dataset.rmtab; c.moving=''; render();});
   const en=document.getElementById('enBtn');
   if(en) en.onclick=()=>{c.enabled=!c.enabled; if(!c.enabled)c.moving=''; render();};
-  document.querySelectorAll('[data-move]').forEach(b=>{
-    const dir=b.dataset.move;
-    if(dir==='stop'){ b.onclick=()=>{c.moving='';render();}; return; }
-    if(!c.enabled) return;
-    b.onmousedown=()=>{c.moving=dir;render();};
-    b.onmouseup=()=>{c.moving='';render();};
-    b.onmouseleave=()=>{if(c.moving===dir){c.moving='';render();}};
+  /* 虚拟摇杆：平移主摇杆 + 旋转副摇杆（互斥取最新方向，松开即停） */
+  bindJoy(document.getElementById('joyMove'),false,dir=>{
+    if(dir) c.moving=dir;
+    else if(c.moving==='up'||c.moving==='down'||c.moving==='left'||c.moving==='right') c.moving='';
+  });
+  bindJoy(document.getElementById('joyRot'),true,dir=>{
+    if(dir) c.moving=dir;
+    else if(c.moving==='rl'||c.moving==='rr') c.moving='';
   });
   document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{c.speed=+b.dataset.speed;render();});
   document.querySelectorAll('[data-adj]').forEach(b=>b.onclick=()=>{
