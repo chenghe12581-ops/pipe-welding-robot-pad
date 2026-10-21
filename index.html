@@ -217,11 +217,16 @@ svg{display:block}
 .dialog h3{font-size:19px;font-weight:700;margin-bottom:8px}
 .dialog p{font-size:14px;color:var(--txt2);line-height:1.6;margin-bottom:22px}
 .dialog .dg-btns{display:flex;gap:12px}
-/* 位置数据弹窗：深色数据面板，复刻浮窗输入区样式（轴标签/表头均为深色底设计色） */
+/* 位置数据弹窗：白底高对比样式（轴标签高饱和色，表头深色文字+蓝色图标，只读输入框浅灰底深字） */
 .pos-dialog p{margin-bottom:10px}
-.pd-panel{background:#142440;border:1px solid var(--ov-line2);border-radius:12px;padding:12px 14px 13px;margin-bottom:20px}
-.pd-panel .fw-grid-hd{margin:0 0 9px}
-.pos-dialog .fw-inp[readonly]{background:rgba(255,255,255,.06);border-color:var(--ov-line2);color:#fff;cursor:default}
+.pos-dialog .fw-grid-hd{margin:10px 0 9px}
+.pos-dialog .fw-grid-hd span{color:var(--txt2)}
+.pos-dialog .fw-grid-hd svg{color:var(--blue)}
+.pos-dialog .fw-grid{margin-bottom:20px}
+.pos-dialog .fw-row .fr-ax.x{background:rgba(214,69,69,.12);color:#d64545}
+.pos-dialog .fw-row .fr-ax.y{background:rgba(31,157,90,.12);color:#1f9d5a}
+.pos-dialog .fw-row .fr-ax.z{background:rgba(47,107,216,.12);color:#2f6bd8}
+.pos-dialog .fw-inp[readonly]{background:var(--gray-bg);border:1px solid var(--line2);color:var(--txt);font-weight:700;cursor:default}
 .dialog .dg-btns button{flex:1;height:46px;border-radius:12px;font-size:15px;font-weight:600;
   display:flex;align-items:center;justify-content:center;gap:7px}
 .dialog .dg-btns button svg{width:18px;height:18px;stroke-width:2;flex:0 0 auto}
@@ -5291,13 +5296,11 @@ function posDataPopup(){
   return `<div class="dialog pos-dialog"><div class="dg-ic">${ic('goto')}</div>
     <h3>位置数据 · ${nm}</h3>
     <p>相对<b>管道坐标系</b>（当前窗口显示值，只读）</p>
-    <div class="pd-panel">
-      <div class="fw-grid-hd"><span>${ic('move3d')}位置 (mm)</span><span>${ic('reset')}朝向 (°)</span></div>
-      <div class="fw-grid">
-        ${cell('x','X',p.x)}${cell('x','Rx',p.rx)}
-        ${cell('y','Y',p.y)}${cell('y','Ry',p.ry)}
-        ${cell('z','Z',p.z)}${cell('z','Rz',p.rz)}
-      </div>
+    <div class="fw-grid-hd"><span>${ic('move3d')}位置 (mm)</span><span>${ic('reset')}朝向 (°)</span></div>
+    <div class="fw-grid">
+      ${cell('x','X',p.x)}${cell('x','Rx',p.rx)}
+      ${cell('y','Y',p.y)}${cell('y','Ry',p.ry)}
+      ${cell('z','Z',p.z)}${cell('z','Rz',p.rz)}
     </div>
     <div class="dg-btns"><button class="dg-ok" data-act="pop-close">${ic('check')}关闭</button></div></div>`;
 }
