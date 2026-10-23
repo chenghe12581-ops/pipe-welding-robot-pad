@@ -2598,7 +2598,8 @@ function loginView(){
   const a=S.auth;
   return `<div class="login-wrap">
     <div class="login-left">
-      <div class="ll-top"><div class="ll-mark"><img src="image/logo.png" alt="logo"></div>
+      <div class="ll-top"><!-- 登录页左上角 logo 图标：暂时隐藏，取消下面一行的注释即可恢复显示 -->
+        <!-- <div class="ll-mark"><img src="image/logo.png" alt="logo"></div> -->
         <div class="ll-tt"><b>移动焊接机器人</b><span>PIPE WELDING</span></div></div>
       <div class="ll-graphic"><img src="image/登录页面.PNG" alt=""></div>
       <div class="ll-ver">RobimWeld_Pipe V1.0.0</div>
@@ -2653,7 +2654,9 @@ function logout(){
 }
 function topbar(){
   return `<div class="topbar">
-    <div class="brand"><div class="mark"><img src="image/logo.png" alt="logo"></div>
+    <!-- 左上角 logo 图标：暂时隐藏，取消下面一行的注释即可恢复显示 -->
+    <!-- <div class="brand"><div class="mark"><img src="image/logo.png" alt="logo"></div> -->
+    <div class="brand">
       <div class="tt"><b>移动焊接机器人</b><span>PIPE WELDING</span></div></div>
     <div class="top-status">
       ${unitChip('A')}${unitChip('B')}
